@@ -1,130 +1,52 @@
-const express = require('express');
-const router = express.Router();
-const pool = require('../config/database');
-const { auth } = require('../middleware/auth');
-const Joi = require('joi');
+# Skillora
 
-const createDisputeSchema = Joi.object({
-  booking_id: Joi.number().required(),
-  reason: Joi.string().required(),
-});
+Skillora is a home-services marketplace that connects customers with trusted workers for everyday tasks. The platform is being built to launch in Zambia and scale to additional countries over time.
 
-const resolveDisputeSchema = Joi.object({
-  resolution: Joi.string().required(),
-});
+## Stack
 
-const validate = (schema) => {
-  return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, {
-      abortEarly: false,
-      stripUnknown: true,
-    });
+- Backend: Node.js + Express + PostgreSQL
+- Frontend: Flutter
+- Auth: JWT + role-based access
 
-    if (error) {
-      error.isJoi = true;
-      return next(error);
-    }
+## Repository structure
 
-    req.validatedData = value;
-    next();
-  };
-};
+- `backend/` - Express API, PostgreSQL schema, migration and seed scripts
+- `flutter_app/` - Flutter mobile application
 
-// Create dispute
-router.post('/', auth(), validate(createDisputeSchema), async (req, res) => {
-  const { booking_id, reason } = req.validatedData;
+## Backend setup
 
-  // Get booking
-  const bookingResult = await pool.query(
-    'SELECT * FROM bookings WHERE id = $1',
-    [booking_id]
-  );
+```bash
+cd backend
+cp .env.example .env
+npm install
+npm run migrate
+npm run seed
+npm run dev
+```
 
-  if (bookingResult.rows.length === 0) {
-    return res.status(404).json({ error: 'Booking not found' });
-  }
+## Flutter setup
 
-  const booking = bookingResult.rows[0];
+```bash
+cd flutter_app
+flutter pub get
+flutter run
+```
 
-  // Check if user is part of booking
-  if (booking.customer_id !== req.user.id && booking.worker_id !== req.user.id) {
-    return res.status(403).json({ error: 'Not authorized' });
-  }
+## Target launch market
 
-  // Create dispute
-  const result = await pool.query(
-    `INSERT INTO disputes (booking_id, opened_by_id, reason, status)
-     VALUES ($1, $2, $3, 'open')
-     RETURNING *`,
-    [booking_id, req.user.id, reason]
-  );
+- Zambia (initial launch)
+- Expand regionally as the operational model matures
 
-  // Update booking status
-  await pool.query(
-    'UPDATE bookings SET status = $1 WHERE id = $2',
-    ['disputed', booking_id]
-  );
+## Core product flow
 
-  res.status(201).json({ message: 'Dispute created', dispute: result.rows[0] });
-});
+1. Customer creates a job or service request
+2. Workers apply or are selected
+3. Booking is confirmed
+4. Worker checks in/out
+5. Customer confirms completion
+6. Payment is released to worker
+7. Commission is tracked and payouts are managed
 
-// Get all disputes (admin only)
-router.get('/', auth(['admin']), async (req, res) => {
-  const { status = 'open', limit = 20, offset = 0 } = req.query;
+## Notes
 
-  let query = 'SELECT * FROM disputes WHERE status = $1';
-  const params = [status];
-
-  if (status !== 'all') {
-    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
-  }
-
-  const result = await pool.query(query, params);
-  res.json(result.rows);
-});
-
-// Get dispute by ID
-router.get('/:id', auth(), async (req, res) => {
-  const result = await pool.query(
-    `SELECT d.*, b.customer_id, b.worker_id
-     FROM disputes d
-     JOIN bookings b ON d.booking_id = b.id
-     WHERE d.id = $1`,
-    [req.params.id]
-  );
-
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Dispute not found' });
-  }
-
-  const dispute = result.rows[0];
-
-  // Check if admin or part of booking
-  if (req.user.role !== 'admin' && dispute.customer_id !== req.user.id && dispute.worker_id !== req.user.id) {
-    return res.status(403).json({ error: 'Not authorized' });
-  }
-
-  res.json(dispute);
-});
-
-// Resolve dispute (admin only)
-router.patch('/:id/resolve', auth(['admin']), validate(resolveDisputeSchema), async (req, res) => {
-  const { resolution } = req.validatedData;
-
-  const result = await pool.query(
-    `UPDATE disputes
-     SET status = 'resolved', resolution = $1, resolved_at = now()
-     WHERE id = $2
-     RETURNING *`,
-    [resolution, req.params.id]
-  );
-
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'Dispute not found' });
-  }
-
-  res.json({ message: 'Dispute resolved', dispute: result.rows[0] });
-});
-
-module.module.exports = router;
+This repository currently contains the start of the API and a mobile app scaffold, designed for iterative development and expansion.

@@ -1,0 +1,24 @@
+# Flutter/Dart/Pub related
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Android/iOS generated
+android/.gradle/
+android/app/debug.keystore
+android/key.properties
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+
+# VS Code
+.vscode/
+
+# Misc
+*.iml
+*.ipr
+*.iws
+.DS_Store

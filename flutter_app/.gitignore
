@@ -1,0 +1,66 @@
+const bcrypt = require('bcrypt');
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT || 5432),
+  database: process.env.DB_NAME || 'homeworker',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+});
+
+async function seed() {
+  console.log('Seeding default data...');
+
+  const categories = [
+    { name: 'Cleaning', description: 'Home cleaning and general maintenance' },
+    { name: 'Plumbing', description: 'Pipes, leaks, and sanitation work' },
+    { name: 'Electrical', description: 'Wiring and electrical repairs' },
+    { name: 'Gardening', description: 'Lawn care and landscaping' },
+    { name: 'Painting', description: 'Interior and exterior painting' },
+    { name: 'Laundry', description: 'Washing, ironing, and home care' },
+    { name: 'Moving', description: 'Furniture and household moving support' },
+    { name: 'Childcare', description: 'Babysitting and household support' },
+  ];
+
+  for (const category of categories) {
+    const existing = await pool.query(
+      'SELECT id FROM service_categories WHERE name = $1',
+      [category.name]
+    );
+
+    if (existing.rows.length === 0) {
+      await pool.query(
+        `INSERT INTO service_categories (name, description)
+         VALUES ($1, $2)`,
+        [category.name, category.description]
+      );
+    }
+  }
+
+  const adminEmail = 'admin@skillora.app';
+  const adminExists = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
+
+  if (adminExists.rows.length === 0) {
+    const passwordHash = await bcrypt.hash('Admin@123', 10);
+
+    const userResult = await pool.query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, email_verified)
+       VALUES ($1, $2, $3, $4, $5, true, true)
+       RETURNING id`,
+      [adminEmail, passwordHash, 'Skillora', 'Admin', 'admin']
+    );
+
+    const userId = userResult.rows[0].id;
+    await pool.query('INSERT INTO wallets (user_id, balance, available_balance) VALUES ($1, 0, 0)', [userId]);
+  }
+
+  console.log('Seed completed successfully.');
+}
+
+seed()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('Seeding failed:', err);
+    process.exit(1);
+  });
